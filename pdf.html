@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    This is a test, have some pdf renders.
+    <button id="clear-all" onclick="clearAll()">Clear all data</button>
+    <button id="summarize" disabled onclick="summarize()">Summarize this contract</button>
+    <input type="file" id="pdf-upload" accept="application/pdf">
+<dialog id="pdf-dialog" style="position: relative;">
+    <span class="close" onclick="closeDialog()" style="cursor: pointer; float: right; font-size: 40px;">&times;</span>
+    <div id="thumbnail-container">
+    </div>
+    <div id="selected-pages1" name="selected-pages" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background-color: rgba(255, 255, 255, 0.7); padding: 5px; border-radius: 5px;">Selected Pages: None</div>
+    <button onclick="closeDialog()">Close</button>
+</dialog>
+<input type="text" id="selected-pages" name="selected-pages" style="color:black" value="Selected Pages: None"readonly>
+<div id="summary">Summary will appear here.</div>
+<noscript>Please enable Javascript to allow this page to function</noscript>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+    let extractedText = ''
+    globalThis.pdfjsWorker = null;
+    const pages = [];
+    let pageAmount = 0;
+    let selectedPages = document.getElementsByName("selected-pages");
+    let clonedArrayBuffer;
+    clearAll()
+    if (pdfjsLib){
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    else{
+        alert('The page failed to load properly. Please reload the page and try again. If the issue persists, please let our team know so we can make it right.');
+    }
+    function renderPage(page, canvasContext){
+        var viewport = page.getViewport({ scale: 1 });
+        canvasContext.canvas.width = viewport.width;
+        canvasContext.canvas.height = viewport.height;
+    
+        page.render({
+            canvasContext: canvasContext,
+            viewport: viewport
+        });
+    }
+
+    document.getElementById("pdf-upload").addEventListener('change', function(event) {
+        //clearAll()
+        let file = event.target.files[0];
+        if(file.type !== 'application/pdf') {
+            alert('Only files with the extension .pdf are allowed. Please upload a PDF.')
+            return;
+        }
+        document.getElementById('thumbnail-container').innerHTML = "";
+        let fileReader = new FileReader();
+        fileReader.readAsArrayBuffer(file);
+        fileReader.onload = function() {
+            pdfArrayBuffer = this.result;
+            clonedArrayBuffer = new Uint8Array(pdfArrayBuffer).slice().buffer;
+            typedArray = new Uint8Array(this.result);
+            document.getElementById("summarize").disabled = false;
+            pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
+               renderPagesSequentially(pdf, 1);
+           });
+        };
+        fileReader.onerror = function() {
+            console.error();
+        }
+
+    });
+
+    function renderPagesSequentially(pdf, pageNumber) {
+        if (pageNumber > pdf.numPages) {
+            document.getElementById('pdf-dialog').showModal();
+            return;
+        }
+
+        pdf.getPage(pageNumber).then(function(page) {
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+            document.getElementById('thumbnail-container').appendChild(canvas);
+
+            renderPage(page, context);
+
+            canvas.addEventListener('click', function() {
+                selectPage(pageNumber);
+            });
+
+            renderPagesSequentially(pdf, pageNumber + 1);
+        });
+    }
+    function closeDialog() {
+//        console.log("When closing the element, FileReader loaded a file with byte length:", pdfArrayBuffer.byteLength);
+        document.getElementById('pdf-dialog').close();
+    }
+    function selectPage(pageNumber) {
+        if (pages.includes(pageNumber)) {
+            pages.splice(pages.indexOf(pageNumber), 1)
+            pages.sort()
+            pageAmount--
+            console.log(`${pageNumber} removed! Current array: ${pages}`)
+        }
+        else {
+            pages.push(pageNumber)
+            pages.sort()
+            pageAmount++
+            console.log(`${pageNumber} added! Current array: ${pages}`)
+        }
+        if (pageAmount > 5) {
+            for (let i=0; i<selectedPages.length; i++){
+                document.getElementsByName("selected-pages")[i].style.color = "red"
+            }
+        }
+        else {   
+            for (let i=0; i<selectedPages.length; i++){
+                document.getElementsByName("selected-pages")[i].style.color = "black"
+            }
+        }
+        document.getElementById('selected-pages1').textContent = 'Selected Pages: ' + (pages.length > 0 ? pages.join(', ') : 'None') + '(Maximum 5)';
+        document.getElementById('selected-pages').value = 'Selected Pages: ' + (pages.length > 0 ? pages.join(', ') : 'None') + ' (Maximum 5)';    
+    }
+    function clearAll(){
+        document.getElementById("summarize").disabled = true;
+        extractedText = ''
+        document.getElementById('thumbnail-container').innerHTML = ""
+        document.getElementById('selected-pages1').textContent = "Selected Pages: None"
+        document.getElementById('selected-pages').value = "Selected Pages: None"
+        pages.splice(0)
+        pageAmount = 0
+    }
+    async function extractTextFromSelectedPages(pdf, selectedPages) {
+    for (let i = 0; i < selectedPages.length; i++) {
+        const pageNumber = selectedPages[i];
+        const page = await pdf.getPage(pageNumber);
+        const textContent = await page.getTextContent();
+        const textStrings = textContent.items.map(item => item.str);
+        extractedText += textStrings.join(" ") + "\n\n"; 
+    }
+
+    return extractedText;
+}
+    async function sendToServer() {
+        fetch("http://localhost:3000", {
+        method: "POST",
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+               'extractedText': extractedText
+              })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+        }
+            return response.json()
+    })
+        .then(data => console.log(data))
+        .catch(error => console.error("Error:", error));
+    }
+    async function summarize() {
+        if (clonedArrayBuffer && pages.length > 0) {
+        document.getElementById("summarize").disabled = true;
+        const pdf = await pdfjsLib.getDocument(clonedArrayBuffer).promise;
+        const extractedText = await extractTextFromSelectedPages(pdf, pages);
+        // You can also display this extracted text in the UI or process it as needed.
+        } else {
+        alert('Please upload a PDF and select pages first.');
+        }
+        await sendToServer()
+    }
+</script>
+</body>
+</html>
