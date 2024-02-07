@@ -6,9 +6,11 @@
     <title>Document</title>
 </head>
 <body>
-    This is a test, have some pdf renders.
+    Step 1: Browse for and select a file.
+    Step 2: Select pages
+    Step 3: Summarize
     <button id="clear-all" onclick="clearAll()">Clear all data</button>
-    <button id="summarize" disabled onclick="summarize()">Summarize this contract</button>
+    <button id="extract" disabled onclick="extract()">Extract from this PDF</button>
     <input type="file" id="pdf-upload" accept="application/pdf">
 <dialog id="pdf-dialog" style="position: relative;">
     <span class="close" onclick="closeDialog()" style="cursor: pointer; float: right; font-size: 40px;">&times;</span>
@@ -34,7 +36,8 @@
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
     else{
-        alert('The page failed to load properly. Please reload the page and try again. If the issue persists, please let our team know so we can make it right.');
+        //Replace with your own error handling as needed
+        alert('The page failed to load properly. Please reload the page and try again.');
     }
     function renderPage(page, canvasContext){
         var viewport = page.getViewport({ scale: 1 });
@@ -48,7 +51,6 @@
     }
 
     document.getElementById("pdf-upload").addEventListener('change', function(event) {
-        //clearAll()
         let file = event.target.files[0];
         if(file.type !== 'application/pdf') {
             alert('Only files with the extension .pdf are allowed. Please upload a PDF.')
@@ -58,10 +60,11 @@
         let fileReader = new FileReader();
         fileReader.readAsArrayBuffer(file);
         fileReader.onload = function() {
+            //This array buffer is cloned because pdfjs detaches the array buffer when getPage is called.
             pdfArrayBuffer = this.result;
             clonedArrayBuffer = new Uint8Array(pdfArrayBuffer).slice().buffer;
             typedArray = new Uint8Array(this.result);
-            document.getElementById("summarize").disabled = false;
+            document.getElementById("extract").disabled = false;
             pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
                renderPagesSequentially(pdf, 1);
            });
@@ -93,7 +96,6 @@
         });
     }
     function closeDialog() {
-//        console.log("When closing the element, FileReader loaded a file with byte length:", pdfArrayBuffer.byteLength);
         document.getElementById('pdf-dialog').close();
     }
     function selectPage(pageNumber) {
@@ -123,7 +125,8 @@
         document.getElementById('selected-pages').value = 'Selected Pages: ' + (pages.length > 0 ? pages.join(', ') : 'None') + ' (Maximum 5)';    
     }
     function clearAll(){
-        document.getElementById("summarize").disabled = true;
+        document.getElementById("summary").innerHTML = '';
+        document.getElementById("extract").disabled = true;
         extractedText = ''
         document.getElementById('thumbnail-container').innerHTML = ""
         document.getElementById('selected-pages1').textContent = "Selected Pages: None"
@@ -142,35 +145,16 @@
 
     return extractedText;
 }
-    async function sendToServer() {
-        fetch("http://localhost:3000", {
-        method: "POST",
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-               'extractedText': extractedText
-              })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-        }
-            return response.json()
-    })
-        .then(data => console.log(data))
-        .catch(error => console.error("Error:", error));
-    }
-    async function summarize() {
+
+    async function extract() {
         if (clonedArrayBuffer && pages.length > 0) {
-        document.getElementById("summarize").disabled = true;
+        document.getElementById("extract").disabled = true;
         const pdf = await pdfjsLib.getDocument(clonedArrayBuffer).promise;
         const extractedText = await extractTextFromSelectedPages(pdf, pages);
-        // You can also display this extracted text in the UI or process it as needed.
         } else {
         alert('Please upload a PDF and select pages first.');
         }
-        await sendToServer()
+        document.getElementById("summary").innerHTML = extractedText;
     }
 </script>
 </body>
