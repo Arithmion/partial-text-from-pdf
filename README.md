@@ -4,7 +4,7 @@
 
 ##### I created this as part of a larger project ([ReListed](https://relistedonline.com)) with the goal of extracting text client side rather than sending a file to a server to be processed, saving a round trip and sidestepping the potential risks of a file upload. PTFP makes use of pdfjs, and as such should be secure from XSS vulnerabilities, but the extracted text is not currently being sanitized, as I handle that on the server in production.
 
-### Aren't there a million of these?
+### Aren't there a million of these on the internet?
 
 #### Yes, but I decided to share this on github after three realizations.
 ##### 1. I really don't want to accept file uploads. The exploitation potential is enormous, and the validation is a nightmare!
